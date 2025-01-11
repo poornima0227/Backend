@@ -1,47 +1,94 @@
 const userModel = require('../models/userModel');
-
-// Login function
-exports.login = (req, res) => {
-  const { username, password } = req.body;
-
-  // Find user by username
-  userModel.findUserByUsername(username, (err, user) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
-
-    // Check if user exists and if the password matches
-    if (!user || user.password !== password) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Return user details excluding password
-    res.json({ 
-      message: 'Login successful', 
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role // include the role if needed
-      }
-    });
-  });
-};
+const { validationResult } = require('express-validator');
+const bcrypt = require('bcryptjs');
+const db = require('../config/db');
+const randomstring = require('randomstring');
+const sendMail = require('../helpers/sendMail');
 
 // Register function
 exports.register = (req, res) => {
-  const { username, password, email, role = 'farmer' } = req.body; // default role to 'farmer'
+  const errors = validationResult(req);
 
-  // Check if the username already exists
-  userModel.findUserByUsername(username, (err, existingUser) => {
-    if (err) return res.status(500).json({ error: 'Database error' });
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
 
-    if (existingUser) {
-      return res.status(400).json({ error: 'Username already exists' });
+  db.query(
+    `SELECT * FROM users WHERE LOWER(email) = LOWER(${db.escape(req.body.email)});`,
+    (err, result) => {
+      if (result && result.length) {
+        return res.status(409).send({
+          msg: 'This user is already in use!',
+        });
+      } else {
+        bcrypt.hash(req.body.password, 10, (err, hash) => {
+          if (err) {
+            return res.status(400).send({ msg: err });
+          } else {
+            db.query(
+              `INSERT INTO users (username, email, password) VALUES ('${req.body.username}', ${db.escape(req.body.email)}, ${db.escape(hash)});`,
+              (err, result) => {
+                if (err) {
+                  return res.status(400).send({ msg: err });
+                }
+
+                // Send verification mail
+                const mailSubject = 'Mail Verification';
+                const randomToken = randomstring.generate();
+                const content =
+                  '<p>Hi ' +
+                  req.body.username +
+                  ', Please <a href="http://localhost:3000/mail-verification?token=' +
+                  randomToken +
+                  '">Verify</a> your mail.</p>';
+                sendMail(req.body.email, mailSubject, content);
+
+                db.query(
+                  'UPDATE users SET token=? WHERE email=?',
+                  [randomToken, req.body.email],
+                  (error) => {
+                    if (error) {
+                      return res.status(400).send({ msg: error });
+                    }
+                  }
+                );
+
+                return res.status(200).send({
+                  msg: 'This user has been registered with us!',
+                });
+              }
+            );
+          }
+        });
+      }
+    }
+  );
+};
+
+exports.verifyMail = (req, res) => {
+  const token = req.query.token; // Extract the token from the query parameter
+  
+  db.query('SELECT * FROM users WHERE token=? LIMIT 1', token, (err, result) => {
+    if (err) {
+      console.log(err);
+      return res.status(500).send({ msg: 'Internal Server Error' });
     }
 
-    // Create a new user
-    userModel.createUser({ username, password, email, role }, (err, result) => {
-      if (err) return res.status(500).json({ error: 'Database error' });
-      res.json({ message: 'User registered successfully' });
-    });
+    if (result.length > 0) {
+      // If user found, update their email verification status
+      db.query(
+        `UPDATE users SET token=NULL, is_verified=1 WHERE id='${result[0].id}'`,
+        (error) => {
+          if (error) {
+            return res.status(500).send({ msg: 'Database Error' });
+          }
+          return res.render('mail-verification', {
+            message: 'Mail verified successfully!',
+          });
+        }
+      );
+    } else {
+      return res.render('404', { message: 'Invalid verification token!' });
+    }
   });
 };
