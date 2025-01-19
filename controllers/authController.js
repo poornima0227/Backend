@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const randomstring = require('randomstring');
 const sendMail = require('../helpers/sendMail');
+const jwt = require('jsonwebtoken');
+const {JWT_SECRET} = process.env;
 
 // Register function
 exports.register = (req, res) => {
@@ -17,7 +19,7 @@ exports.register = (req, res) => {
     `SELECT * FROM users WHERE LOWER(email) = LOWER(${db.escape(req.body.email)});`,
     (err, result) => {
       if (result && result.length) {
-        return res.status(409).send({
+        return res.status(400).send({
           msg: 'This user is already in use!',
         });
       } else {
@@ -91,4 +93,61 @@ exports.verifyMail = (req, res) => {
       return res.render('404', { message: 'Invalid verification token!' });
     }
   });
+};
+
+
+exports.login = (req, res) =>{
+
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  
+  db.query(
+  
+    `SELECT * FROM users WHERE email = ${db.escape(req.body.email)};`,
+    (err, result)=>{
+      if(err){
+        return res.status(400).send({
+          msg:err
+        });
+      }
+
+      if(!result.length){
+        return res.status(400).send({
+          msg:'Email or Password is incorrect!'
+        });
+
+      }
+
+      bcrypt.compare(
+        req.body.password,
+        result[0]['password'],
+        (bErr, bResult)=>{
+          if(bErr){
+            return res.status(400).send({
+              msg:err
+            });
+          }
+          if(bResult){
+            // console.log(JWT_SECRET);
+            const token = jwt.sign({ id:result[0]['id'], is_admin:result[0]['is_admin'] }, JWT_SECRET, {expiresIn: '1h'});
+
+            return res.status(200).send({
+              msg:'Logged in',
+              user: result[0]
+            });
+
+          }
+
+          return res.status(400).send({
+            msg:'Email or Password is incorrect!'
+          });
+    
+        }
+      );
+    }
+  );
+
 };

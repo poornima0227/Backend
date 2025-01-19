@@ -12,8 +12,8 @@ const sendMail = async(email, mailSubject, content)=>{
             secure:false,
             requireTLS:true,
             auth:{
-                user:process.env.SMTP_MAIL, // Your Gmail address
-                pass:process.env.SMTP_PASSWORD, // Your App Password
+                user:process.env.SMTP_MAIL, 
+                pass:process.env.SMTP_PASSWORD, 
             }
         });
 

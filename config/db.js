@@ -13,7 +13,7 @@ db.connect((err) => {
     console.error(process.env.DB_NAME +' Database connection failed');
     process.exit(1); // Stop the server
   }
-  console.log('Connected to the database.');
+  console.log('Connected to the '+process.env.DB_NAME +' database.');
 });
 
 module.exports = db;
