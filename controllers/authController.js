@@ -20,17 +20,23 @@ exports.register = (req, res) => {
     (err, result) => {
       if (result && result.length) {
         return res.status(400).send({
-          msg: 'This user is already in use!',
+          msg: 'This email is already in use!',
         });
       } else {
         bcrypt.hash(req.body.password, 10, (err, hash) => {
           if (err) {
             return res.status(400).send({ msg: err });
           } else {
+            const adminEmail = 'poornimalakshmi807@gmail.com'; // Replace with your admin email
+            const isAdmin = req.body.email.toLowerCase() === adminEmail.toLowerCase() ? 1 : 0;
+
+
             db.query(
-              `INSERT INTO users (username, email, password) VALUES ('${req.body.username}', ${db.escape(req.body.email)}, ${db.escape(hash)});`,
+              `INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?);`,
+              [req.body.username, req.body.email, hash, isAdmin],
               (err, result) => {
                 if (err) {
+                  console.error("DB Error:", err);
                   return res.status(400).send({ msg: err });
                 }
 
@@ -38,15 +44,12 @@ exports.register = (req, res) => {
                 const mailSubject = 'Mail Verification';
                 const randomToken = randomstring.generate();
                 const content =
-                  '<p>Hi ' +
-                  req.body.username +
-                  ', Please <a href="http://localhost:3000/mail-verification?token=' +
-                  randomToken +
-                  '">Verify</a> your mail.</p>';
+                  `<p>Hi ${req.body.username},</p>` +
+                  `<p>Please <a href="http://localhost:3000/mail-verification?token=${randomToken}">verify your email</a>.</p>`;
                 sendMail(req.body.email, mailSubject, content);
 
                 db.query(
-                  'UPDATE users SET token=? WHERE email=?',
+                  'UPDATE users SET token = ? WHERE email = ?',
                   [randomToken, req.body.email],
                   (error) => {
                     if (error) {
@@ -55,9 +58,15 @@ exports.register = (req, res) => {
                   }
                 );
 
-                return res.status(200).send({
-                  msg: 'This user has been registered with us!',
-                });
+                const response = {
+                  msg: 'User has been registered successfully!',
+                };
+
+                if (isAdmin) {
+                  response.isAdmin = true; // Include only for admin
+                }
+
+                return res.status(200).send(response);
               }
             );
           }
@@ -136,6 +145,7 @@ exports.login = (req, res) =>{
 
             return res.status(200).send({
               msg:'Logged in',
+              token,
               user: result[0]
             });
 
@@ -150,4 +160,41 @@ exports.login = (req, res) =>{
     }
   );
 
+};
+
+exports.getUser = (req, res) => {
+  const authToken = req.headers.authorization.split(' ')[1];
+  const decode = jwt.verify(authToken, JWT_SECRET);
+
+  // Modify the query to select only the specific fields (name, age, address)
+  db.query('SELECT * FROM users WHERE id = ?', decode.id, function(error, result, fields) {
+    if (error) throw error;
+
+    return res.status(200).send({ success: true, data: result[0], message: 'Fetch Successfully!' });
+  });
+};
+
+exports.updateUser = (req, res) => {
+  const { name, age, address } = req.body;  // Get the new data from the request body
+  const authToken = req.headers.authorization.split(' ')[1];
+  const decode = jwt.verify(authToken, JWT_SECRET);
+
+  // Validate the input data
+  if (!name || !age || !address) {
+    return res.status(400).send({ success: false, message: 'All fields are required!' });
+  }
+
+  // Create the SQL query to update the user's profile
+  const updateQuery = 'UPDATE users SET name = ?, age = ?, address = ? WHERE id = ?';
+  
+  // Execute the query
+  db.query(updateQuery, [name, age, address, decode.id], function(error, result) {
+    if (error) throw error;
+
+    if (result.affectedRows === 0) {
+      return res.status(404).send({ success: false, message: 'User not found!' });
+    }
+
+    return res.status(200).send({ success: true, message: 'Profile updated successfully!' });
+  });
 };
