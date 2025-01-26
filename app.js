@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const db = require('./config/db'); // Database configuration file
 const bodyParser = require('body-parser');
+const path = require('path');
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended:true }));
@@ -18,6 +19,10 @@ app.use((err, re, res, next)=>{
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/', require('./routes/webRoutes'));
+
+
+// Serve static files for uploaded images
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Root route
 app.get('/', (req, res) => {

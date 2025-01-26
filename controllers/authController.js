@@ -141,7 +141,7 @@ exports.login = (req, res) =>{
           }
           if(bResult){
             // console.log(JWT_SECRET);
-            const token = jwt.sign({ id:result[0]['id'], is_admin:result[0]['is_admin'] }, JWT_SECRET, {expiresIn: '1h'});
+            const token = jwt.sign({ id:result[0]['id'], is_admin:result[0]['is_admin'] }, JWT_SECRET, {expiresIn: '10d'});
 
             return res.status(200).send({
               msg:'Logged in',
@@ -166,29 +166,37 @@ exports.getUser = (req, res) => {
   const authToken = req.headers.authorization.split(' ')[1];
   const decode = jwt.verify(authToken, JWT_SECRET);
 
-  // Modify the query to select only the specific fields (name, age, address)
-  db.query('SELECT * FROM users WHERE id = ?', decode.id, function(error, result, fields) {
+  db.query('SELECT name, age, address, photo FROM users WHERE id = ?', [decode.id], function (error, result) {
     if (error) throw error;
 
-    return res.status(200).send({ success: true, data: result[0], message: 'Fetch Successfully!' });
+    return res.status(200).send({
+      success: true,
+      data: result[0],
+      message: 'Fetched Successfully!',
+    });
   });
 };
 
 exports.updateUser = (req, res) => {
-  const { name, age, address } = req.body;  // Get the new data from the request body
+  const { name, age, address } = req.body;
   const authToken = req.headers.authorization.split(' ')[1];
   const decode = jwt.verify(authToken, JWT_SECRET);
 
-  // Validate the input data
+  // Check if the user uploaded a file
+  const photo = req.file ? `uploads/${req.file.filename}` : null;
+
   if (!name || !age || !address) {
     return res.status(400).send({ success: false, message: 'All fields are required!' });
   }
 
-  // Create the SQL query to update the user's profile
-  const updateQuery = 'UPDATE users SET name = ?, age = ?, address = ? WHERE id = ?';
-  
-  // Execute the query
-  db.query(updateQuery, [name, age, address, decode.id], function(error, result) {
+  // Update query with photo
+  const updateQuery = photo
+    ? 'UPDATE users SET name = ?, age = ?, address = ?, photo = ? WHERE id = ?'
+    : 'UPDATE users SET name = ?, age = ?, address = ? WHERE id = ?';
+
+  const queryParams = photo ? [name, age, address, photo, decode.id] : [name, age, address, decode.id];
+
+  db.query(updateQuery, queryParams, function (error, result) {
     if (error) throw error;
 
     if (result.affectedRows === 0) {
@@ -198,3 +206,4 @@ exports.updateUser = (req, res) => {
     return res.status(200).send({ success: true, message: 'Profile updated successfully!' });
   });
 };
+
