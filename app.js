@@ -30,7 +30,7 @@ app.get('/', (req, res) => {
 });
 
 // Define configurations directly in code
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3306;
 
 app.listen(PORT, () => {
   console.log(`Server running....`);
