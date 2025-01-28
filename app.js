@@ -21,8 +21,8 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/', require('./routes/webRoutes'));
 
 
-// Serve static files for uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static('uploads'));
+
 
 // Root route
 app.get('/', (req, res) => {
@@ -30,7 +30,7 @@ app.get('/', (req, res) => {
 });
 
 // Define configurations directly in code
-const PORT = process.env.PORT || 3306;
+const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running....`);
