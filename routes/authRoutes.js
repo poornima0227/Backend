@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const gardenController = require('../controllers/gardenController');
+const articleController = require('../controllers/articleController');
 const upload = require('../middleware/uploadMiddleware');
 const {
   signUpValidation,
@@ -19,5 +20,8 @@ router.put('/update-user',upload.single('photo'), updateProfileValidation, handl
 // Garden item routes
 router.get('/get-items', gardenController.getItem);
 router.post('/add-items', upload.single('picture'), gardenController.addItem);
+
+router.get('/get-article', articleController.getArticles); // Get all articles
+router.post('/add-article', articleController.addArticle); // Add an article
 
 module.exports = router;
