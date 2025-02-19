@@ -53,3 +53,46 @@ exports.getItem = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch items' });
   }
 };
+
+
+exports.addDetails = async (req, res) => {
+  const { garden_id, price, soil_type, season, temperature_range, water_requirements } = req.body;
+
+  // Validate input
+  if (!garden_id) return res.status(400).json({ message: "Garden ID is required" });
+  if (!price) return res.status(400).json({ message: "Price is required" });
+  if (!soil_type) return res.status(400).json({ message: "Soil type is required" });
+  if (!season) return res.status(400).json({ message: "Season is required" });
+  if (!temperature_range) return res.status(400).json({ message: "Temperature range is required" });
+  if (!water_requirements) return res.status(400).json({ message: "Water requirements are required" });
+
+  try {
+    // Insert details into the database
+    await db.query(
+      "INSERT INTO details (garden_id, price, soil_type, season, temperature_range, water_requirements) VALUES (?, ?, ?, ?, ?, ?)",
+      [garden_id, price, soil_type, season, temperature_range, water_requirements]
+    );
+
+    res.status(201).json({ message: "Crop details added successfully" });
+  } catch (error) {
+    console.error("Error adding crop details:", error);
+    res.status(500).json({ message: "Failed to add crop details" });
+  }
+};
+
+// Fetch All Crop Details with Garden Info
+exports.getDetails = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT g.id, g.name, g.category, g.description, g.picture,
+              d.price, d.soil_type, d.season, d.temperature_range, d.water_requirements
+       FROM garden g
+       LEFT JOIN details d ON g.id = d.garden_id`
+    );
+
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error("Error fetching crop details:", error);
+    res.status(500).json({ message: "Failed to fetch crop details" });
+  }
+};

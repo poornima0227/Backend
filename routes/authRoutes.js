@@ -24,4 +24,7 @@ router.post('/add-items', upload.single('picture'), gardenController.addItem);
 router.get('/get-article', articleController.getArticles); // Get all articles
 router.post('/add-article', articleController.addArticle); // Add an article
 
+router.post("/add-details", gardenController.addDetails);
+router.get("/get-details", gardenController.getDetails);
+
 module.exports = router;
