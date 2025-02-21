@@ -37,22 +37,31 @@ exports.addItem = async (req, res) => {
 
 // Get Items by Category
 exports.getItem = async (req, res) => {
-  const { category } = req.params;
+  let category = req.query.category ? req.query.category.trim() : null; // Trim spaces
+
+  console.log("Requested category:", category); // Debugging
+
+  if (!category) {
+      return res.status(400).json({ message: "Category is required" });
+  }
 
   try {
-    // Fetch items by category
-    const [rows] = await db.query(
-      'SELECT id, name, category, description, picture FROM garden WHERE category = ?',
-      [category]
-    );
+      const [rows] = await db.query(
+          'SELECT id, name, category, description, picture FROM garden WHERE TRIM(category) = ?',
+          [category]
+      );
 
-    // Respond with the fetched items
-    res.status(200).json(rows);
+      if (rows.length === 0) {
+          return res.status(404).json({ message: "No items found for this category" });
+      }
+
+      res.status(200).json(rows);
   } catch (error) {
-    console.error('Error fetching items:', error);
-    res.status(500).json({ message: 'Failed to fetch items' });
+      console.error("Error fetching items:", error);
+      res.status(500).json({ message: "Failed to fetch items" });
   }
 };
+
 
 
 exports.addDetails = async (req, res) => {

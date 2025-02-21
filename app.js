@@ -9,7 +9,7 @@ app.use(bodyParser.urlencoded({ extended:true }));
 
 
 //error handling
-app.use((err, re, res, next)=>{
+app.use((err, req, res, next)=>{
   err.statusCode = err.statusCode || 500;
   err.message = err.message || "Internal Server Error";
   res.status(err.statusCode).json({
