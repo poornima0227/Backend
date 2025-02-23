@@ -19,6 +19,8 @@ exports.updateProfileValidation = [
 
     check('address', 'Address is required').not().isEmpty(),
 ];
+
+
 exports.handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
