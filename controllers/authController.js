@@ -1,4 +1,4 @@
-
+const mysql = require('mysql2/promise')
 const { validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
@@ -7,73 +7,56 @@ const sendMail = require('../helpers/sendMail');
 const jwt = require('jsonwebtoken');
 const {JWT_SECRET} = process.env;
 
-// Register function
-exports.register = (req, res) => {
-  const errors = validationResult(req);
-
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  db.query(
-    `SELECT * FROM users WHERE LOWER(email) = LOWER(${db.escape(req.body.email)});`,
-    (err, result) => {
-      if (result && result.length) {
-        return res.status(400).send({
-          msg: 'This email is already in use!',
-        });
-      } else {
-        bcrypt.hash(req.body.password, 10, (err, hash) => {
-          if (err) {
-            return res.status(400).send({ msg: err });
-          } else {
-            const adminEmail = 'poornimalakshmi807@gmail.com'; // Replace with your admin email
-            const isAdmin = req.body.email.toLowerCase() === adminEmail.toLowerCase() ? 1 : 0;
-
-
-            db.query(
-              `INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?);`,
-              [req.body.username, req.body.email, hash, isAdmin],
-              (err, result) => {
-                if (err) {
-                  console.error("DB Error:", err);
-                  return res.status(400).send({ msg: err });
-                }
-
-                // Send verification mail
-                const mailSubject = 'Mail Verification';
-                const randomToken = randomstring.generate();
-                const content =
-                  `<p>Hi ${req.body.username},</p>` +
-                  `<p>Please <a href="http://localhost:3000/mail-verification?token=${randomToken}">verify your email</a>.</p>`;
-                sendMail(req.body.email, mailSubject, content);
-
-                db.query(
-                  'UPDATE users SET token = ? WHERE email = ?',
-                  [randomToken, req.body.email],
-                  (error) => {
-                    if (error) {
-                      return res.status(400).send({ msg: error });
-                    }
-                  }
-                );
-
-                const response = {
-                  msg: 'User has been registered successfully!',
-                };
-
-                if (isAdmin) {
-                  response.isAdmin = true; // Include only for admin
-                }
-
-                return res.status(200).send(response);
-              }
-            );
-          }
-        });
+exports.register = async (req, res) => {
+  try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+          return res.status(400).json({ errors: errors.array() });
       }
-    }
-  );
+
+      // Check if email already exists
+      const [existingUsers] = await db.query(
+          `SELECT * FROM users WHERE LOWER(email) = LOWER(?);`,
+          [req.body.email]
+      );
+
+      if (existingUsers.length > 0) {
+          return res.status(400).json({ msg: 'This email is already in use!' });
+      }
+
+      // Hash password
+      const hash = await bcrypt.hash(req.body.password, 10);
+
+      // Check if user is admin
+      const adminEmail = 'poornimalakshmi807@gmail.com'; // Replace with your admin email
+      const isAdmin = req.body.email.toLowerCase() === adminEmail.toLowerCase() ? 1 : 0;
+
+      // Insert user into database
+      const [insertResult] = await db.query(
+          `INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?);`,
+          [req.body.username, req.body.email, hash, isAdmin]
+      );
+
+      // Send verification mail
+      const mailSubject = 'Mail Verification';
+      const randomToken = randomstring.generate();
+      const content = `<p>Hi ${req.body.username},</p>` +
+          `<p>Please <a href="http://localhost:3000/mail-verification?token=${randomToken}">verify your email</a>.</p>`;
+
+      await sendMail(req.body.email, mailSubject, content);
+
+      // Store verification token in DB
+      await db.query('UPDATE users SET token = ? WHERE email = ?', [randomToken, req.body.email]);
+
+      const response = { msg: 'User has been registered successfully!' };
+      if (isAdmin) response.isAdmin = true; // Add only for admin
+
+      return res.status(200).json(response);
+
+  } catch (error) {
+      console.error("Error:", error);
+      return res.status(500).json({ msg: "Internal Server Error", error });
+  }
 };
 
 exports.verifyMail = (req, res) => {
@@ -105,61 +88,49 @@ exports.verifyMail = (req, res) => {
 };
 
 
-exports.login = (req, res) =>{
-
-  const errors = validationResult(req);
-
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-  
-  db.query(
-  
-    `SELECT * FROM users WHERE email = ${db.escape(req.body.email)};`,
-    (err, result)=>{
-      if(err){
-        return res.status(400).send({
-          msg:err
-        });
-      }
-
-      if(!result.length){
-        return res.status(400).send({
-          msg:'Email or Password is incorrect!'
-        });
-
-      }
-
-      bcrypt.compare(
-        req.body.password,
-        result[0]['password'],
-        (bErr, bResult)=>{
-          if(bErr){
-            return res.status(400).send({
-              msg:err
-            });
-          }
-          if(bResult){
-            // console.log(JWT_SECRET);
-            const token = jwt.sign({ id:result[0]['id'], is_admin:result[0]['is_admin'] }, JWT_SECRET, {expiresIn: '10d'});
-
-            return res.status(200).send({
-              msg:'Logged in',
-              token,
-              user: result[0]
-            });
-
-          }
-
-          return res.status(400).send({
-            msg:'Email or Password is incorrect!'
-          });
-    
-        }
-      );
+exports.login = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
-  );
 
+    // Get email from request
+    const email = req.body.email;
+
+    // Use async/await without callbacks
+    const [result] = await db.query(
+      `SELECT * FROM users WHERE email = ?`,
+      [email]
+    );
+
+    if (result.length === 0) {
+      return res.status(400).send({ msg: "Email or Password is incorrect!" });
+    }
+
+    // Compare password using bcrypt
+    const isMatch = await bcrypt.compare(req.body.password, result[0].password);
+
+    if (!isMatch) {
+      return res.status(400).send({ msg: "Email or Password is incorrect!" });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: result[0].id, is_admin: result[0].is_admin },
+      JWT_SECRET,
+      { expiresIn: "10d" }
+    );
+
+    return res.status(200).send({
+      msg: "Logged in",
+      token,
+      user: result[0],
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send({ msg: "Server error", error: err.message });
+  }
 };
 
 exports.getUser = (req, res) => {
