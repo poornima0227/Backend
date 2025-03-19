@@ -178,3 +178,34 @@ exports.updateUser = (req, res) => {
   });
 };
 
+
+exports.addTask = async (req, res) => {
+  console.log("Received request:", req.body);  // ✅ Check if request is received
+
+  try {
+    const { task_name, description, due_date, status } = req.body;
+
+    if (!task_name || !due_date) {
+      console.log("❌ Missing required fields");
+      return res.status(400).json({ message: "Task name and due date are required" });
+    }
+
+    const sql = "INSERT INTO tasks (task_name, description, due_date, status) VALUES (?, ?, ?, ?)";
+
+    const connection = await db.getConnection(); // ✅ Get connection from pool
+
+    try {
+      const [result] = await connection.query(sql, [task_name, description, due_date, status || "pending"]);
+      
+
+      return res.status(201).json({ message: "Task added successfully", taskId: result.insertId });
+    } finally {
+      connection.release(); // ✅ Release connection back to the pool
+    }
+
+  } catch (error) {
+   
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+

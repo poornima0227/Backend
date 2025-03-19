@@ -27,4 +27,6 @@ router.post('/add-article', articleController.addArticle); // Add an article
 router.post("/add-details", gardenController.addDetails);
 router.get("/get-details", gardenController.getDetails);
 
+router.post("/add-task", authController.addTask);
+
 module.exports = router;
