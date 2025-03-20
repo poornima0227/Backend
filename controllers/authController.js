@@ -59,33 +59,32 @@ exports.register = async (req, res) => {
   }
 };
 
-exports.verifyMail = (req, res) => {
-  const token = req.query.token; // Extract the token from the query parameter
-  
-  db.query('SELECT * FROM users WHERE token=? LIMIT 1', token, (err, result) => {
-    if (err) {
-      console.log(err);
-      return res.status(500).send({ msg: 'Internal Server Error' });
+exports.verifyMail = async (req, res) => {
+  const token = req.query.token; // Extract token from query params
+
+  if (!token) {
+    return res.render('404', { message: 'Invalid verification token!' });
+  }
+
+  try {
+    // Check if token exists in DB
+    const [result] = await db.query('SELECT * FROM users WHERE token=? LIMIT 1', [token]);
+
+    if (result.length === 0) {
+      return res.render('404', { message: 'Invalid or expired verification token!' });
     }
 
-    if (result.length > 0) {
-      // If user found, update their email verification status
-      db.query(
-        `UPDATE users SET token=NULL, is_verified=1 WHERE id='${result[0].id}'`,
-        (error) => {
-          if (error) {
-            return res.status(500).send({ msg: 'Database Error' });
-          }
-          return res.render('mail-verification', {
-            message: 'Mail verified successfully!',
-          });
-        }
-      );
-    } else {
-      return res.render('404', { message: 'Invalid verification token!' });
-    }
-  });
+    // Update user verification status
+    await db.query('UPDATE users SET token=NULL, is_verified=1 WHERE id=?', [result[0].id]);
+
+    return res.render('mail-verification', { message: 'Mail verified successfully!' });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send({ msg: 'Internal Server Error' });
+  }
 };
+
 
 
 exports.login = async (req, res) => {
@@ -133,50 +132,61 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.getUser = (req, res) => {
-  const authToken = req.headers.authorization.split(' ')[1];
-  const decode = jwt.verify(authToken, JWT_SECRET);
+exports.getUser = async (req, res) => {
+  try {
+    const authToken = req.headers.authorization?.split(' ')[1];
 
-  db.query('SELECT name, age, address, photo FROM users WHERE id = ?', [decode.id], function (error, result) {
-    if (error) throw error;
+    if (!authToken) {
+      return res.status(401).send({ success: false, message: "No token provided!" });
+    }
+
+    const decode = jwt.verify(authToken, process.env.JWT_SECRET);
+    const [result] = await db.query('SELECT name, age, address, photo FROM users WHERE id = ?', [decode.id]);
+
+    if (result.length === 0) {
+      return res.status(404).send({ success: false, message: "User not found!" });
+    }
 
     return res.status(200).send({
       success: true,
       data: result[0],
       message: 'Fetched Successfully!',
     });
-  });
+
+  } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).send({ success: false, message: "Session expired. Please log in again." });
+    } else {
+      return res.status(401).send({ success: false, message: "Invalid token!" });
+    }
+  }
 };
 
-exports.updateUser = (req, res) => {
-  const { name, age, address } = req.body;
-  const authToken = req.headers.authorization.split(' ')[1];
-  const decode = jwt.verify(authToken, JWT_SECRET);
+exports.updateUser = async (req, res) => {
+  const authToken = req.headers.authorization?.split(' ')[1];
 
-  // Check if the user uploaded a file
-  const photo = req.file ? `uploads/${req.file.filename}` : null;
-
-  if (!name || !age || !address) {
-    return res.status(400).send({ success: false, message: 'All fields are required!' });
+  if (!authToken) {
+    return res.status(401).send({ success: false, message: "No token provided!" });
   }
 
-  // Update query with photo
-  const updateQuery = photo
-    ? 'UPDATE users SET name = ?, age = ?, address = ?, photo = ? WHERE id = ?'
-    : 'UPDATE users SET name = ?, age = ?, address = ? WHERE id = ?';
+  console.log("Received Token:", authToken); // Debugging token
 
-  const queryParams = photo ? [name, age, address, photo, decode.id] : [name, age, address, decode.id];
+  try {
+    const decode = jwt.verify(authToken, process.env.JWT_SECRET);
+    console.log("Decoded Token:", decode); // Check if decoding works
 
-  db.query(updateQuery, queryParams, function (error, result) {
-    if (error) throw error;
+    // Proceed with updating user
+  } catch (error) {
+    console.error("JWT Error:", error); // Log exact JWT error
 
-    if (result.affectedRows === 0) {
-      return res.status(404).send({ success: false, message: 'User not found!' });
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).send({ success: false, message: "Session expired. Please log in again." });
+    } else {
+      return res.status(401).send({ success: false, message: "Invalid token!" });
     }
-
-    return res.status(200).send({ success: true, message: 'Profile updated successfully!' });
-  });
+  }
 };
+
 
 
 exports.addTask = async (req, res) => {

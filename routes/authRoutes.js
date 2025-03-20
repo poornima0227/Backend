@@ -21,8 +21,9 @@ router.put('/update-user',upload.single('photo'), updateProfileValidation, handl
 router.get('/get-items', gardenController.getItem);
 router.post('/add-items', upload.single('picture'), gardenController.addItem);
 
-router.get('/get-article', articleController.getArticles); // Get all articles
-router.post('/add-article', articleController.addArticle); // Add an article
+router.post('/add-article', upload.single('image'), articleController.addArticle);
+// Get all articles
+router.get('/get-article/:id', articleController.getArticle); // Add an article
 
 router.post("/add-details", gardenController.addDetails);
 router.get("/get-details", gardenController.getDetails);
