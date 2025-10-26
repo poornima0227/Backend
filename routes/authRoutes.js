@@ -3,7 +3,8 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const gardenController = require('../controllers/gardenController');
 const articleController = require('../controllers/articleController');
-const upload = require('../middleware/uploadMiddleware');
+const cropController = require('../controllers/cropController');
+
 const {
   signUpValidation,
   loginValidation,
@@ -15,19 +16,20 @@ const {
 router.post('/register', signUpValidation, handleValidationErrors, authController.register);
 router.post('/login', loginValidation, handleValidationErrors, authController.login);
 router.get('/get-user', authController.getUser);
-router.put('/update-user',upload.single('photo'), updateProfileValidation, handleValidationErrors, authController.updateUser);
+router.put('/update-user', updateProfileValidation, handleValidationErrors, authController.updateUser);
 
 // Garden item routes
 router.get('/get-items', gardenController.getItem);
-router.post('/add-items', upload.single('picture'), gardenController.addItem);
+router.post('/add-items', gardenController.addItem); // Removed Multer
 
-router.post('/add-article', upload.single('image'), articleController.addArticle);
-// Get all articles
-router.get('/get-article/:id', articleController.getArticle); // Add an article
+router.post('/add-article', articleController.addArticle); // Removed Multer
+router.get('/get-article/:id?', articleController.getArticle);
 
 router.post("/add-details", gardenController.addDetails);
 router.get("/get-details", gardenController.getDetails);
 
 router.post("/add-task", authController.addTask);
+
+router.post("/calculate", cropController.calculate);
 
 module.exports = router;

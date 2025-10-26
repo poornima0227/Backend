@@ -1,82 +1,72 @@
 const db = require('../config/db');
+const cloudinary = require("../config/cloudinaryConfig");
 
-// Add Item
+// ✅ Add Item (Image stored as BLOB)
 exports.addItem = async (req, res) => {
-  const { id, name, category, description } = req.body;
-  const picturePath = req.file ? req.file.path : null; // Uploaded file's path
+  const { name, category, description, picture } = req.body; // `picture` should be Base64
 
-  // Validate inputs
-  if (!id) return res.status(400).json({ message: 'ID is required' });
-  if (!name) return res.status(400).json({ message: 'Name is required' });
-  if (!category) return res.status(400).json({ message: 'Category is required' });
-  if (!description) return res.status(400).json({ message: 'Description is required' });
-  if (!picturePath) return res.status(400).json({ message: 'Picture is required' });
-
-  // Construct the picture URL
-  const pictureUrl = `${req.protocol}://${req.get('host')}/${picturePath}`; // Full URL for the image
+  if (!name || !category || !description || !picture) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
 
   try {
-    // Insert item into the database
+    // Upload image to Cloudinary
+    const result = await cloudinary.uploader.upload(picture, {
+      folder: "garden_images", // Cloudinary folder
+    });
+
+    const imageUrl = result.secure_url; // Get Cloudinary Image URL
+
+    // Store data in MySQL
     await db.query(
-      'INSERT INTO garden (id, name, category, description, picture) VALUES (?, ?, ?, ?, ?)',
-      [id, name, category, description, pictureUrl]
+      "INSERT INTO garden (name, category, description, picture) VALUES (?, ?, ?, ?)",
+      [name, category, description, imageUrl]
     );
 
-    res.status(201).json({
-      id,
-      name,
-      category,
-      description,
-      picture: pictureUrl,
-    });
+    res.status(201).json({ message: "Item added successfully", imageUrl });
   } catch (error) {
-    console.error('Error adding item:', error);
-    res.status(500).json({ message: 'Failed to add item' });
+    console.error("Error adding item:", error);
+    res.status(500).json({ message: "Failed to add item" });
   }
 };
 
-// Get Items by Category
+// ✅ Get Items by Category
 exports.getItem = async (req, res) => {
-  let category = req.query.category ? req.query.category.trim() : null; // Trim spaces
-
-  console.log("Requested category:", category); // Debugging
-
-  if (!category) {
-      return res.status(400).json({ message: "Category is required" });
-  }
+  const category = req.query.category ? req.query.category.trim() : null;
 
   try {
-      const [rows] = await db.query(
-          'SELECT id, name, category, description, picture FROM garden WHERE TRIM(category) = ?',
-          [category]
-      );
+    let query = "SELECT id, name, category, description, picture, price, soil_type FROM garden";
+    let params = [];
 
-      if (rows.length === 0) {
-          return res.status(404).json({ message: "No items found for this category" });
-      }
+    if (category) {
+      query += " WHERE category = ?";
+      params.push(category);
+    }
 
-      res.status(200).json(rows);
+    const [rows] = await db.query(query, params);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "No items found" });
+    }
+
+    res.status(200).json(rows);
   } catch (error) {
-      console.error("Error fetching items:", error);
-      res.status(500).json({ message: "Failed to fetch items" });
+    console.error("Error fetching items:", error);
+    res.status(500).json({ message: "Failed to fetch items" });
   }
 };
 
 
 
+// ✅ Add Crop Details
 exports.addDetails = async (req, res) => {
   const { garden_id, price, soil_type, season, temperature_range, water_requirements } = req.body;
 
-  // Validate input
-  if (!garden_id) return res.status(400).json({ message: "Garden ID is required" });
-  if (!price) return res.status(400).json({ message: "Price is required" });
-  if (!soil_type) return res.status(400).json({ message: "Soil type is required" });
-  if (!season) return res.status(400).json({ message: "Season is required" });
-  if (!temperature_range) return res.status(400).json({ message: "Temperature range is required" });
-  if (!water_requirements) return res.status(400).json({ message: "Water requirements are required" });
+  if (!garden_id || !price || !soil_type || !season || !temperature_range || !water_requirements) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
 
   try {
-    // Insert details into the database
     await db.query(
       "INSERT INTO details (garden_id, price, soil_type, season, temperature_range, water_requirements) VALUES (?, ?, ?, ?, ?, ?)",
       [garden_id, price, soil_type, season, temperature_range, water_requirements]
@@ -89,15 +79,28 @@ exports.addDetails = async (req, res) => {
   }
 };
 
-// Fetch All Crop Details with Garden Info
+// ✅ Fetch All Crop Details with Garden Info
 exports.getDetails = async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT g.id, g.name, g.category, g.description, g.picture,
-              d.price, d.soil_type, d.season, d.temperature_range, d.water_requirements
+      `SELECT 
+          g.id AS garden_id, 
+          g.name AS garden_name, 
+          g.category, 
+          g.description, 
+          
+          IFNULL(d.price, 0.00) AS price,  -- Ensure price is not NULL
+          IFNULL(d.soil_type, 'Unknown') AS soil_type, 
+          IFNULL(d.season, 'Not specified') AS season, 
+          IFNULL(d.temperature_range, 'N/A') AS temperature_range, 
+          IFNULL(d.water_requirements, 'Not available') AS water_requirements 
        FROM garden g
        LEFT JOIN details d ON g.id = d.garden_id`
     );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "No crop details found" });
+    }
 
     res.status(200).json(rows);
   } catch (error) {

@@ -1,41 +1,57 @@
 const db = require('../config/db');
+const cloudinary = require("../config/cloudinaryConfig");
 
-// Get all articles
-exports.getArticle= async (req, res) => {
+// ✅ Add an Article (Image stored in Cloudinary)
+exports.addArticle = async (req, res) => {
     try {
-        const { id } = req.params; // Get the article ID from URL parameters
+        const { title, content, author, published_date, category, tags, image } = req.body; // `image` should be Base64
 
-        const [article] = await db.query('SELECT * FROM articles WHERE id = ?', [id]);
-
-        if (!article.length) {
-            return res.status(404).json({ message: 'Article not found' });
+        if (!title || !image) {
+            return res.status(400).json({ error: "Title and image are required!" });
         }
 
-        res.status(200).json(article[0]); // Return the found article
+        // Upload image to Cloudinary
+        const result = await cloudinary.uploader.upload(image, {
+            folder: "articles_images", // Cloudinary folder
+        });
+
+        const imageUrl = result.secure_url; // Cloudinary Image URL
+
+        // Store article in MySQL
+        const [newArticle] = await db.query(
+            'INSERT INTO articles (title, content, author, published_date, category, tags, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+            [title, content, author, published_date || null, category || null, tags || null, imageUrl]
+        );
+
+        res.status(201).json({ message: 'Article created successfully!', id: newArticle.insertId, imageUrl });
     } catch (err) {
-        console.error('Database error:', err);
+        console.error("Database error:", err);
         res.status(500).json({ error: 'Database error', details: err.message });
     }
 };
 
-
-// Add a new article
-exports.addArticle = async (req, res) => {
+// ✅ Get all Articles (or a single article by ID)
+exports.getArticle = async (req, res) => {
     try {
-        const { title, content, author, published_date, category, tags } = req.body;
-        const image_url = req.file ? `/uploads/${req.file.filename}` : null; // Get file path
+        const { id } = req.params; // Get article ID from URL parameters
 
-        if (!title) {
-            return res.status(400).json({ error: "Title is required!" });
+        let query = 'SELECT id, title, content, author, published_date, category, tags, image_url FROM articles';
+        let values = [];
+
+        if (id) {
+            query += ' WHERE id = ?';
+            values.push(id);
         }
 
-        const [result] = await db.query(
-            'INSERT INTO articles (title, content, author, published_date, category, tags, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-            [title, content, author, published_date || null, category || null, tags || null, image_url]
-        );
+        const [articles] = await db.query(query, values);
 
-        res.status(201).json({ message: 'Article created successfully!', id: result.insertId, image_url });
+        if (!articles.length) {
+            return res.status(404).json({ message: 'No articles found' });
+        }
+
+        res.status(200).json(id ? articles[0] : articles);
     } catch (err) {
+        console.error('Database error:', err);
         res.status(500).json({ error: 'Database error', details: err.message });
     }
 };
